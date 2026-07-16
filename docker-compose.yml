@@ -1,0 +1,80 @@
+services:
+
+  mongodb:
+    image: mongo:7.0
+    container_name: techmart_mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_DATABASE: techmart_support
+    volumes:
+      - mongodb_data:/data/db
+      - mongodb_config:/data/configdb
+    networks:
+      - techmart_network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: techmart_backend
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - GROQ_API_KEY=${GROQ_API_KEY}
+      - SECRET_KEY=${SECRET_KEY:-supersecretkey}
+      - LLM_PROVIDER=${LLM_PROVIDER:-groq}
+      - MONGO_URI=mongodb://mongodb:27017/techmart_support
+    volumes:
+      - ./knowledge_base:/app/knowledge_base
+      - vectorstore_data:/app/vectorstore
+      # ← HOT RELOAD: mount source code directly
+      - ./backend:/app
+    depends_on:
+      mongodb:
+        condition: service_healthy
+    networks:
+      - techmart_network
+    # Use reload flag so backend restarts on file change
+    command: uvicorn main:app --host 0.0.0.0 --port 8000 --reload
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: techmart_frontend
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:8000
+      - WATCHPACK_POLLING=true
+    volumes:
+      # ← HOT RELOAD: mount source code directly
+      - ./frontend/src:/app/src
+      - ./frontend/public:/app/public
+    networks:
+      - techmart_network
+    # Use dev mode so frontend hot reloads on file change
+    command: npm run dev
+
+volumes:
+  mongodb_data:
+    name: techmart_mongodb_data
+  mongodb_config:
+    name: techmart_mongodb_config
+  vectorstore_data:
+    name: techmart_vectorstore
+
+networks:
+  techmart_network:
+    name: techmart_network
+    driver: bridge

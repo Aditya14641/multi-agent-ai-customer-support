@@ -1,0 +1,12 @@
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.env
+venv/
+.venv/
+vectorstore/
+evaluation/results/
+*.log
+.git/
+.gitignore
